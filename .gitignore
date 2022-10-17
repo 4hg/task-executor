@@ -1,0 +1,7 @@
+# eclipse project stuff
+.project
+.settings/
+.classpath
+# everything else
+.svn
+*.class

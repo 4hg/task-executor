@@ -7,17 +7,17 @@ import taskExecutorImpl.TaskExecutorImpl;
 
 public class TaskExecutorTest
 {
-    @Test
+    
     public void runTest()
     {
         // Initialize the executor with 10 threads & a queue size of 100.
-        final TaskExecutorImpl taskExecutor = new TaskExecutorImpl(1);
+        final TaskExecutorImpl taskExecutor = new TaskExecutorImpl(10);
 
         // Inject 1000 tasks into the executor in a separate thread.
         Runnable inserter = new Runnable() {
             public void run()
             {
-                for (int idx = 0; idx < 100; idx++) {
+                for (int idx = 0; idx < 1000; idx++) {
                     // Note that Threads are assigned names.
                     String name = "SimpleTask" + idx;
                     Task myTask = new SimpleTestTask(name);
@@ -29,12 +29,17 @@ public class TaskExecutorTest
 
         Thread insertThread = new Thread(inserter);
         insertThread.start();
+        try {
+            insertThread.join();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
     }
 
+    @Test
     public void runTestSetup()
     {
         TaskExecutorTest app = new TaskExecutorTest();
         app.runTest();
     }
-
 }

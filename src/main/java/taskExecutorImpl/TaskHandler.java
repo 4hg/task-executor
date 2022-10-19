@@ -2,7 +2,7 @@ package taskExecutorImpl;
 
 import taskExecutor.Task;
 
-public class TaskHandler implements Runnable {
+public class TaskHandler implements Runnable{
     boolean isAvailable = true;
     Task task;
     TaskExecutorImpl taskExecutorImpl;
@@ -29,18 +29,9 @@ public class TaskHandler implements Runnable {
     public void run() {
         Task current;
         while (true) {
-            System.out.println("Thread "+ Thread.currentThread().getId()+" beginning execution." );
-            try {
                 current = taskExecutorImpl.removeTaskFromQueue();
                 current.execute();
-            synchronized (taskExecutorImpl.getAddMonitor()) {
-                System.out.println("removeTask: Thread " + Thread.currentThread().getId() + " has completed. "+ current.getName() +" Notifying main");
-                taskExecutorImpl.getAddMonitor().notify();
-            }
-            }catch(Exception e) {
-                System.err.println("ERROR" + Thread.currentThread().getId());
-                e.printStackTrace();
-            }
         }
     }
+
 }

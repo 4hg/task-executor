@@ -1,8 +1,9 @@
 package taskExecutorImpl;
 
+import java.lang.Thread.UncaughtExceptionHandler;
+
 import taskExecutor.Task;
 import taskExecutor.TaskExecutor;
-import taskExecutor.test.SimpleTestTask;
 
 public class TaskExecutorImpl implements TaskExecutor {
 
@@ -17,108 +18,152 @@ public class TaskExecutorImpl implements TaskExecutor {
     private boolean addIsNotified = false;
     private boolean takeIsNotified = false;
 
+    
     public TaskExecutorImpl(int threadPoolSize) {
-        System.out.println("Starting with "+threadPoolSize+" threads.");
+        Thread.currentThread().setUncaughtExceptionHandler(new UncaughtExceptionHandler() {
+
+            @Override
+            public void uncaughtException(Thread t, Throwable e) {
+                e.printStackTrace();
+                
+            }
+            
+        });
+        
+//        System.out.println("Starting with " + threadPoolSize + " threads.");
         threads = new Thread[threadPoolSize];
+        
+//        Runnable r = new Runnable() {
+//            public void run() {
+//                System.out.println("MONITOR: "+Thread.currentThread().getName());
+//                while (true) {
+//                    StringBuffer sb = new StringBuffer();
+//                    for (Thread t : threads) {
+//                        if(t != null)
+//                        if (t.isAlive()) {
+//                            sb.append(t.getName()+t.getState() + ", ");
+//                        } else {
+//                            sb.append("DEAD, ");
+//                        }
+//                    }
+//                    System.out.println(sb.toString());
+//                    try {
+//                        Thread.sleep(50);
+//                        System.err.println(Thread.currentThread().getThreadGroup().activeCount());
+//                        System.err.println(Thread.getAllStackTraces());
+//                    } catch (Throwable e) {
+//                        // TODO Auto-generated catch block
+//                        e.printStackTrace();
+//                    }
+//                }
+//            }
+//        };
+//        Thread monThread = new Thread(r);
+//        monThread.setPriority(5);
+//        monThread.start();
+//        
+        
+        
         for (int i = 0; i < threadPoolSize; i++) {
             threads[i] = new Thread(new TaskHandler(i, this));
+            threads[i].setUncaughtExceptionHandler(new UncaughtExceptionHandler() {
+
+                @Override
+                public void uncaughtException(Thread t, Throwable e) {
+                    e.printStackTrace();
+                    
+                }
+                
+            });
             threads[i].start();
-            // System.out.println("Thread " + threads[i].getId() + " has started");
         }
+        
+
+       
 
     }
 
     // Used by test
     @Override
     public void addTask(Task task) {
-        StringBuffer sb = new StringBuffer();
-        for (Task t : fifoQueue) {
-            if (t == null) {
-                sb.append(", ");
-            } else {
-                sb.append(t.getName() + ", ");
-            }
-        }
-        System.out.println(sb);
-
-        fifoQueue[nextOpenTask++ % fifoQueue.length] = task;
-
-        availableTasks++;
-        System.out.println("MAIN: available tasks:"+availableTasks);
-        synchronized (addMonitor) {
-            try {
-                if (availableTasks == fifoQueue.length) {
-                    do {
-                        System.out.println("MAIN: Waiting for handlers");
-                        addMonitor.wait(100);
-                        synchronized (takeMonitor) {
-                            takeMonitor.notify();
-                        }
-                        
-                    } while (!addIsNotified);
-                    addIsNotified = false;
-                    System.out.println("MAIN: Handler found");
+        // Block when pointer points to an existing
+        if (fifoQueue[nextOpenTask % fifoQueue.length] != null) {
+            do {
+                synchronized (addMonitor) {
+                    try {
+                        addMonitor.wait(20000);
+                    } catch (Throwable e) {
+                        e.printStackTrace();
+                    }
                 }
-            } catch (InterruptedException e) {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
-            }
+                // Notify Task Handlers
+                synchronized (takeMonitor) {
+                    setTakeNotified(true);
+                    takeMonitor.notify();
+                }
+
+            } while (!addIsNotified || fifoQueue[nextOpenTask % fifoQueue.length] != null);
+            setAddNotified(false);
         }
 
-        System.out.println("Handler available - AddTask: Waiting count: " + waiting);
+        // Add new task to queue
+        fifoQueue[nextOpenTask++ % fifoQueue.length] = task;
+        availableTasks++;
 
+        // Notify Task Handlers
         synchronized (takeMonitor) {
+            setTakeNotified(true);
             takeMonitor.notify();
-            takeIsNotified = true;
         }
-
+//        
+//        try {
+//            System.err.println(Thread.currentThread().getName());
+//            Thread.sleep(2000);
+//        } catch (InterruptedException e) {
+//            // TODO Auto-generated catch block
+//            e.printStackTrace();
+//        }
+//        
     }
 
     // Used by TaskHandler
     public Task removeTaskFromQueue() {
         Task removed = null;
-
         synchronized (takeMonitor) {
-
-            while (fifoQueue[nextTask % fifoQueue.length] == null || removed == null) {
-                try {
-
-                    //System.out.println("Available tasks: " + availableTasks);
-                    if (availableTasks == 0) {
-                        do {
-                            waiting++;
-                            System.out.println("Waiting count: " + waiting);
-                            takeMonitor.wait(100);
-                            takeIsNotified = false;
-                            waiting--;
-                            System.out.println("Waiting count: " + waiting);
-                            synchronized (addMonitor) {
-                                System.out.println(Thread.currentThread().getId()+"-THREAD Notifying wait to main thread");
-                                addMonitor.notify();
-                                addIsNotified = true;
-                            }
-                        } while (!takeIsNotified);
+            // if queue is empty wait
+            if (availableTasks == 0 && fifoQueue[nextTask % fifoQueue.length] == null) {
+                waiting++;
+                do {
+                    try {
+                        takeMonitor.wait(100);
+                    } catch (Throwable e) {
+                        // TODO Auto-generated catch block
+                        e.printStackTrace();
                     }
 
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-                removed = fifoQueue[nextTask % fifoQueue.length];
+                } while (!takeIsNotified || fifoQueue[nextTask % fifoQueue.length] == null);
+                // leave while loop if notification or removed is not null
+                // reset notification
+                setTakeNotified(false);
+                waiting--;
+
             }
+
+            removed = fifoQueue[nextTask % fifoQueue.length];
+            
+//            System.err.println(removed.getName() + " was removed by Thread-"+ Thread.currentThread().getName());
 
             fifoQueue[nextTask++ % fifoQueue.length] = null;
             availableTasks--;
-            System.out.println(removed.getName() + " was removed from task pool " + Thread.currentThread().getId());
+//            System.err.println("available tasks:"+availableTasks);
 
-            synchronized (addMonitor) {
-                System.out.println(Thread.currentThread().getId()+"-THREAD Notifying completion to main thread");
-                addMonitor.notify();
-                addIsNotified = true;
-            }
-//            
-//            takeMonitor.notify();
-//            takeIsNotified = true;
+            takeMonitor.notify();
+        }
 
+        // Notify Add Monitor observers
+        synchronized (addMonitor) {
+            setAddNotified(true);
+            addMonitor.notify();
         }
 
         return removed;
@@ -131,6 +176,14 @@ public class TaskExecutorImpl implements TaskExecutor {
 
     public Object getAddMonitor() {
         return addMonitor;
+    }
+
+    public void setTakeNotified(boolean bool) {
+        takeIsNotified = bool;
+    }
+
+    public void setAddNotified(boolean bool) {
+        addIsNotified = bool;
     }
 
 }

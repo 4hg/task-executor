@@ -42,9 +42,9 @@ public class SimpleTestTask implements Task
             sb.append(mutableInt.increment());
             // Note that the printed message includes the Thread's unique name.
             System.out.println(sb);
-        } catch (InterruptedException e) {
+        } catch (Throwable e) {
             e.printStackTrace();
-        }
+        } 
     }
 }
 
